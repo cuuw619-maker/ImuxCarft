@@ -36,9 +36,9 @@ jobs:
           echo "=== Git revision ==="
           git rev-parse HEAD
           echo "=== Texture count ==="
-          find . -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | wc -l
+          find assets background -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | wc -l
           echo "=== Texture paths ==="
-          find . -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | sort || true
+          find assets background -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | sort || true
 
       - name: Configure
         shell: msys2 {0}
@@ -60,12 +60,12 @@ jobs:
           set -euxo pipefail
           echo "=== ldd ImuxCarft.exe ==="
           ldd build/ImuxCarft.exe 2>&1 | tee dependencies.log
-          if grep -Ei 'not found|cannot find' dependencies.log; then
-            echo "::error::Unresolved DLL dependency."
+          if grep -Eiq 'not found|cannot find' dependencies.log; then
+            echo "::error::Unresolved DLL dependency before packaging."
             exit 1
           fi
 
-      - name: Package and collect all required DLLs
+      - name: Package executable, assets and recursive DLL dependencies
         shell: msys2 {0}
         run: |
           set -euxo pipefail
@@ -77,11 +77,12 @@ jobs:
 
           copy_deps() {
             local target="$1"
+            local dep
             while IFS= read -r dep; do
               [ -f "$dep" ] || continue
+              local name="$(basename "$dep")"
               case "$dep" in
-                /mingw64/bin/*.dll)
-                  local name="$(basename "$dep")"
+                /mingw64/bin/*.dll|/c/msys64/mingw64/bin/*.dll|C:/msys64/mingw64/bin/*.dll)
                   if [ ! -f "dist/$name" ]; then
                     echo "COPY DLL: $dep"
                     cp "$dep" "dist/$name"
@@ -89,19 +90,44 @@ jobs:
                   fi
                   ;;
               esac
-            done < <(ldd "$target" 2>/dev/null | awk '/=>/ && $3 ~ /^\/mingw64\/bin\// {print $3}')
+            done < <(
+              ldd "$target" 2>/dev/null |
+                awk '
+                  /=>/ {
+                    for (i=1; i<=NF; ++i)
+                      if ($i ~ /mingw64\/bin\/.*\.dll$/ || $i ~ /\/mingw64\/bin\/.*\.dll$/) print $i
+                  }
+                ' |
+                sed 's/^[[:space:]]*//; s/[[:space:]]*$//' |
+                sort -u
+            )
           }
 
           copy_deps build/ImuxCarft.exe
 
+          # Ensure the common runtime DLLs are present when supplied by MSYS2.
+          for dll in \
+            SDL2.dll SDL2_image.dll glew32.dll \
+            libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll \
+            zlib1.dll libpng16-16.dll libjpeg-8.dll libtiff-6.dll libwebp-7.dll; do
+            if [ -f "/mingw64/bin/$dll" ] && [ ! -f "dist/$dll" ]; then
+              echo "COPY COMMON DLL: /mingw64/bin/$dll"
+              cp "/mingw64/bin/$dll" "dist/$dll"
+            fi
+          done
+
           echo "=== Packaged files ==="
           find dist -type f -printf '%p %s bytes\n' | sort
 
+          echo "=== DLL files in dist ==="
+          find dist -maxdepth 1 -type f -iname '*.dll' -printf '%f\n' | sort
+
+          echo "=== Dependency validation with dist first in PATH ==="
           (
             cd dist
-            ldd ./ImuxCarft.exe 2>&1 | tee ../packaged-dependencies.log
+            PATH="$PWD:/mingw64/bin:$PATH" ldd ./ImuxCarft.exe 2>&1 | tee ../packaged-dependencies.log
           )
-          if grep -Ei 'not found|cannot find' packaged-dependencies.log; then
+          if grep -Eiq 'not found|cannot find' packaged-dependencies.log; then
             echo "::error::Packaged executable still has unresolved DLL dependencies."
             exit 1
           fi
