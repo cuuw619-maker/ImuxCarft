@@ -166,14 +166,24 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
         glBindBuffer(GL_ARRAY_BUFFER,skyVbo_);glBufferData(GL_ARRAY_BUFFER,sizeof(q),q,GL_STATIC_DRAW);
         glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,5*sizeof(float),(void*)0);glEnableVertexAttribArray(0);
         glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,5*sizeof(float),(void*)(3*sizeof(float)));glEnableVertexAttribArray(1);
-        for(int i=0;i<6;i++)sky_[i]=loadPng(root/"background"/("panorama_"+std::to_string(i)+".png"));
+        int loadedSky=0;
+        for(int i=0;i<6;i++){
+            const auto path=root/"background"/("panorama_"+std::to_string(i)+".png");
+            sky_[i]=loadPng(path);
+            if(sky_[i]) ++loadedSky;
+        }
         const char* uv=R"(#version 330 core
 layout(location=0)in vec3 p;void main(){gl_Position=vec4(p.x*2.0-1.0,1.0-p.y*2.0,0,1);})";
         const char* uf=R"(#version 330 core
 out vec4 c;uniform vec4 color;void main(){c=color;})";
         uiP_=makeProgram(uv,uf);glGenVertexArrays(1,&uiVao_);glGenBuffers(1,&uiVbo_);glBindVertexArray(uiVao_);
         glBindBuffer(GL_ARRAY_BUFFER,uiVbo_);glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0);glEnableVertexAttribArray(0);
-        return sky_[0]&&uiP_;
+        if(!uiP_ || !skyVao_ || !uiVao_){
+            std::cerr<<"Menu GPU objects are incomplete\\n";
+            return false;
+        }
+        if(loadedSky!=6) std::cerr<<"Menu panorama textures loaded: "<<loadedSky<<"/6\\n";
+        return true;
     }
     void resize(int w,int h){w_=w;h_=h;}
     bool hitPlay(int x,int y)const{return x>w_*.33f&&x<w_*.67f&&y>h_*.57f&&y<h_*.66f;}
@@ -245,6 +255,10 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
             }
         }
         for(int i=0;i<4;i++) count_[i]=(GLsizei)mesh[i].size();
+        std::cerr<<"World textures: grass_top="<<(tex_[0]!=0)
+                 <<" grass_side="<<(tex_[1]!=0)
+                 <<" dirt="<<(tex_[2]!=0)
+                 <<" stone="<<(tex_[3]!=0)<<"\\n";
         glGenVertexArrays(1,&vao_);
         glGenBuffers(4,vbo_.data());
         glBindVertexArray(vao_);
@@ -253,7 +267,16 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
         }
         glBindBuffer(GL_ARRAY_BUFFER,vbo_[0]);glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)0);glEnableVertexAttribArray(0);
         glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(V),(void*)(3*sizeof(float)));glEnableVertexAttribArray(1);
-        glBindVertexArray(0);return p_&&tex_[0]&&tex_[1]&&tex_[2]&&tex_[3];
+        glBindVertexArray(0);
+        if(!p_){
+            std::cerr<<"World shader program creation failed\\n";
+            return false;
+        }
+        if(!tex_[0] || !tex_[1] || !tex_[2] || !tex_[3]){
+            std::cerr<<"World texture initialization failed\\n";
+            return false;
+        }
+        return true;
     }
     void draw(int w,int h,float time){
         glEnable(GL_DEPTH_TEST);glEnable(GL_CULL_FACE);glCullFace(GL_BACK);
@@ -297,7 +320,14 @@ bool Engine::initialize(){
     impl_->log.write(std::string("OpenGL vendor: ")+(const char*)glGetString(GL_VENDOR));
     impl_->log.write(std::string("OpenGL renderer: ")+(const char*)glGetString(GL_RENDERER));
     impl_->log.write(std::string("OpenGL version: ")+(const char*)glGetString(GL_VERSION));
-    if(!impl_->menu.init(impl_->root,impl_->config.width,impl_->config.height)||!impl_->world.init(impl_->root)){impl_->log.write("Failed to initialize menu or world");return false;}
+    const bool menuOk=impl_->menu.init(impl_->root,impl_->config.width,impl_->config.height);
+    impl_->log.write(std::string("Menu initialization: ")+(menuOk?"OK":"FAILED"));
+    const bool worldOk=impl_->world.init(impl_->root);
+    impl_->log.write(std::string("World initialization: ")+(worldOk?"OK":"FAILED"));
+    if(!menuOk || !worldOk){
+        impl_->log.write("Initialization failure details were printed above");
+        return false;
+    }
     impl_->running=true;impl_->log.write("Engine initialized successfully");return true;
 }
 void Engine::run(){
