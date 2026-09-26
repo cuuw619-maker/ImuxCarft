@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euxo pipefail
           echo "=== Git revision ==="
-          git rev-parse HEAD
+          /usr/bin/git rev-parse HEAD
           echo "=== Texture count ==="
           find assets background -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | wc -l
           echo "=== Texture paths ==="
