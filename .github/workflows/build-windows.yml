@@ -145,27 +145,20 @@ jobs:
             exit 1
           fi
 
-          tar -a -c -f ImuxCarft-Windows-x64.zip -C dist .
-
-      - name: Upload build logs and diagnostics
+      - name: Upload Windows game artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ImuxCarft-build-logs
+          name: ImuxCarft-Windows-x64
+          path: dist
+          if-no-files-found: error
+
+      - name: Upload build diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImuxCarft-build-diagnostics
           path: |
             configure.log
             build.log
             dependencies.log
             packaged-dependencies.log
-          if-no-files-found: error
-
-      - name: Upload Windows build
-        uses: actions/upload-artifact@v4
-        with:
-          name: ImuxCarft-Windows-x64
-          path: |
-            dist/ImuxCarft.exe
-            dist/assets
-            dist/background
-            dist/*.dll
-            ImuxCarft-Windows-x64.zip
           if-no-files-found: error
