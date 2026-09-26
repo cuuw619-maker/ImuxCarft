@@ -14,7 +14,11 @@ file(GLOB_RECURSE IMUX_ENGINE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/engine/src/*.cpp"
 )
 
-add_executable(ImuxCarft ${IMUX_ENGINE_SOURCES})
+if(WIN32)
+    add_executable(ImuxCarft WIN32 ${IMUX_ENGINE_SOURCES})
+else()
+    add_executable(ImuxCarft ${IMUX_ENGINE_SOURCES})
+endif()
 target_include_directories(ImuxCarft PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/engine/include")
 target_link_libraries(ImuxCarft PRIVATE SDL2::SDL2 SDL2_image::SDL2_image OpenGL::GL GLEW::GLEW)
 
