@@ -15,6 +15,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <cstdio>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -73,7 +74,13 @@ static GLuint makeProgram(const char* vs,const char* fs){
 
         GLuint s=glCreateShader(type);glShaderSource(s,1,&src,nullptr);glCompileShader(s);
         GLint ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
-        if(!ok){char log[2048]{};glGetShaderInfoLog(s,sizeof(log),nullptr,log);std::cerr<<log<<"\n";}
+        if(!ok){
+            char log[2048]{};
+            glGetShaderInfoLog(s,sizeof(log),nullptr,log);
+            if(g_runtimeLog) g_runtimeLog->write(std::string("Shader compile failed: ")+log);
+            glDeleteShader(s);
+            return 0;
+        }
         return s;
     };
     GLuint a=compile(GL_VERTEX_SHADER,vs),b=compile(GL_FRAGMENT_SHADER,fs);
@@ -82,15 +89,27 @@ static GLuint makeProgram(const char* vs,const char* fs){
     if(!p) return 0;
     glAttachShader(p,a);glAttachShader(p,b);glLinkProgram(p);
     GLint ok=0;glGetProgramiv(p,GL_LINK_STATUS,&ok);
-    if(!ok){char log[2048]{};glGetProgramInfoLog(p,sizeof(log),nullptr,log);std::cerr<<log<<"\n";}
+    if(!ok){
+        char log[2048]{};
+        glGetProgramInfoLog(p,sizeof(log),nullptr,log);
+        if(g_runtimeLog) g_runtimeLog->write(std::string("Shader link failed: ")+log);
+        glDeleteShader(a);glDeleteShader(b);glDeleteProgram(p);
+        return 0;
+    }
     glDeleteShader(a);glDeleteShader(b);return p;
 }
 
 static GLuint loadPng(const std::filesystem::path& path){
     SDL_Surface* s=IMG_Load(path.string().c_str());
-    if(!s){std::cerr<<"Texture "<<path<<" : "<<IMG_GetError()<<"\n";return 0;}
+    if(!s){
+        if(g_runtimeLog) g_runtimeLog->write(std::string("Texture load failed: ")+path.string()+" : "+IMG_GetError());
+        return 0;
+    }
     SDL_Surface* r=SDL_ConvertSurfaceFormat(s,SDL_PIXELFORMAT_RGBA32,0);SDL_FreeSurface(s);
-    if(!r)return 0;
+    if(!r){
+        if(g_runtimeLog) g_runtimeLog->write(std::string("Texture conversion failed: ")+path.string()+" : "+SDL_GetError());
+        return 0;
+    }
     GLuint t=0;glGenTextures(1,&t);glBindTexture(GL_TEXTURE_2D,t);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
@@ -289,9 +308,9 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
         if(g_runtimeLog) g_runtimeLog->write(
             "World mesh built: vertices=["+std::to_string(count_[0])+","+std::to_string(count_[1])+","+std::to_string(count_[2])+","+std::to_string(count_[3])+"]");
         if(g_runtimeLog) g_runtimeLog->write("Creating world VAO/VBO buffers");
-        if(glGetError()!=GL_NO_ERROR){
-            std::cerr<<"World OpenGL error before buffer creation\\n";
-        }
+        GLenum preBufferError=glGetError();
+        if(preBufferError!=GL_NO_ERROR && g_runtimeLog)
+            g_runtimeLog->write("OpenGL error before world buffers: 0x"+[] (GLenum e){char b[16];std::snprintf(b,sizeof(b),"%04X",(unsigned)e);return std::string(b);}(preBufferError));
         glGenVertexArrays(1,&vao_);
         glGenBuffers(4,vbo_.data());
         if(!vao_ || !vbo_[0] || !vbo_[1] || !vbo_[2] || !vbo_[3]){
