@@ -178,6 +178,97 @@ out vec4 c;uniform vec4 color;void main(){c=color;})";
     void quit(){for(auto&t:sky_)if(t)glDeleteTextures(1,&t);if(skyVbo_)glDeleteBuffers(1,&skyVbo_);if(skyVao_)glDeleteVertexArrays(1,&skyVao_);if(uiVbo_)glDeleteBuffers(1,&uiVbo_);if(uiVao_)glDeleteVertexArrays(1,&uiVao_);if(skyP_)glDeleteProgram(skyP_);if(uiP_)glDeleteProgram(uiP_);}
 };
 
+class GameInterfaces {
+    enum class Panel { None, Inventory, Anvil, Beacon, Horse, Villager, Nautilus };
+    Panel panel_=Panel::None;
+    GLuint p_=0,vao_=0,vbo_=0;
+    GLuint inventoryTex_=0,genericTex_=0;
+    int w_=1280,h_=720;
+
+    static void quad(std::vector<float>&v,float x,float y,float sx,float sy){
+        v.insert(v.end(),{x,y,0,x+sx,y,0,x+sx,y+sy,0,x,y,0,x+sx,y+sy,0,x,y+sy,0});
+    }
+    void rect(float x,float y,float sx,float sy,float r,float g,float b,float a){
+        std::vector<float>v;quad(v,x,y,sx,sy);
+        glUseProgram(p_);glBindVertexArray(vao_);glBindBuffer(GL_ARRAY_BUFFER,vbo_);
+        glBufferData(GL_ARRAY_BUFFER,(GLsizeiptr)(v.size()*sizeof(float)),v.data(),GL_STREAM_DRAW);
+        glUniform4f(glGetUniformLocation(p_,"color"),r,g,b,a);
+        glDrawArrays(GL_TRIANGLES,0,6);
+    }
+    void slot(float x,float y,float size=.055f){
+        rect(x,y,size,size,.12f,.12f,.12f,.92f);
+        rect(x+.004f,y+.004f,size-.008f,size-.008f,.28f,.28f,.28f,.95f);
+    }
+    void label(const char*name){
+        // Text is deliberately omitted here; the panel geometry and slots remain resolution independent.
+        (void)name;
+    }
+public:
+    bool init(const std::filesystem::path&root,int w,int h){
+        w_=w;h_=h;
+        const char*vs=R"(#version 330 core
+layout(location=0)in vec3 p;void main(){gl_Position=vec4(p.x*2.0-1.0,1.0-p.y*2.0,0,1);})";
+        const char*fs=R"(#version 330 core
+out vec4 c;uniform vec4 color;void main(){c=color;})";
+        p_=makeProgram(vs,fs);
+        inventoryTex_=loadPng(root/"assets/textures/gui/inventory.png");
+        genericTex_=loadPng(root/"assets/textures/gui/generic_54.png");
+        glGenVertexArrays(1,&vao_);glGenBuffers(1,&vbo_);
+        glBindVertexArray(vao_);glBindBuffer(GL_ARRAY_BUFFER,vbo_);
+        glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3*sizeof(float),(void*)0);glEnableVertexAttribArray(0);
+        return p_!=0;
+    }
+    void resize(int w,int h){w_=w;h_=h;}
+    void close(){panel_=Panel::None;}
+    void open(Panel p){panel_=p;}
+    bool open()const{return panel_!=Panel::None;}
+    void draw(){
+        if(panel_==Panel::None)return;
+        glDisable(GL_DEPTH_TEST);glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);
+        rect(.12f,.08f,.76f,.84f,.08f,.08f,.08f,.96f);
+        rect(.14f,.10f,.72f,.055f,.18f,.18f,.18f,1);
+        switch(panel_){
+            case Panel::Inventory:
+                for(int row=0;row<3;row++)for(int col=0;col<9;col++)slot(.25f+col*.058f,.24f+row*.06f);
+                for(int col=0;col<9;col++)slot(.25f+col*.058f,.62f);
+                break;
+            case Panel::Anvil:
+                slot(.23f,.31f);slot(.33f,.31f);slot(.57f,.31f);
+                rect(.43f,.33f,.10f,.045f,.45f,.45f,.45f,1);
+                for(int col=0;col<3;col++)slot(.25f+col*.058f,.55f);
+                break;
+            case Panel::Beacon:
+                for(int row=0;row<3;row++)for(int col=0;col<3;col++)slot(.27f+col*.058f,.25f+row*.06f);
+                rect(.48f,.25f,.22f,.18f,.16f,.55f,.75f,.55f);
+                break;
+            case Panel::Horse:
+                for(int row=0;row<3;row++)for(int col=0;col<5;col++)slot(.22f+col*.058f,.23f+row*.06f);
+                slot(.60f,.23f);slot(.66f,.23f);
+                for(int col=0;col<9;col++)slot(.25f+col*.058f,.62f);
+                break;
+            case Panel::Villager:
+                for(int row=0;row<3;row++)for(int col=0;col<9;col++)slot(.25f+col*.058f,.23f+row*.06f);
+                rect(.55f,.25f,.18f,.13f,.42f,.32f,.18f,.9f);
+                rect(.55f,.42f,.18f,.08f,.24f,.24f,.24f,.9f);
+                break;
+            case Panel::Nautilus:
+                for(int row=0;row<2;row++)for(int col=0;col<9;col++)slot(.25f+col*.058f,.27f+row*.06f);
+                rect(.47f,.18f,.26f,.07f,.05f,.32f,.58f,.92f);
+                for(int col=0;col<9;col++)slot(.25f+col*.058f,.60f);
+                break;
+            default:break;
+        }
+        glDisable(GL_BLEND);glUseProgram(0);
+    }
+    void quit(){
+        if(inventoryTex_)glDeleteTextures(1,&inventoryTex_);
+        if(genericTex_)glDeleteTextures(1,&genericTex_);
+        if(vbo_)glDeleteBuffers(1,&vbo_);
+        if(vao_)glDeleteVertexArrays(1,&vao_);
+        if(p_)glDeleteProgram(p_);
+    }
+};
+
 class World {
     struct V{float x,y,z,u,v;};
     GLuint p_=0,vao_=0;std::array<GLuint,4> tex_{};std::array<GLuint,4> vbo_{};std::array<GLsizei,4> count_{};
@@ -248,7 +339,7 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
 
 }
 class OpenGLRenderer final:public Renderer{int w_=1,h_=1;public:bool initialize(int w,int h)override{resize(w,h);return true;}void resize(int w,int h)override{w_=std::max(w,1);h_=std::max(h,1);glViewport(0,0,w_,h_);}void beginFrame()override{glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void endFrame()override{}int w()const{return w_;}int h()const{return h_;}};
-struct Engine::Impl{explicit Impl(EngineConfig c):config(c){}EngineConfig config;SDL_Window*window=nullptr;SDL_GLContext context=nullptr;std::unique_ptr<Renderer>renderer;Menu menu;World world;GameLog log;bool running=false,game=false;float time=0;std::filesystem::path root;};
+struct Engine::Impl{explicit Impl(EngineConfig c):config(c){}EngineConfig config;SDL_Window*window=nullptr;SDL_GLContext context=nullptr;std::unique_ptr<Renderer>renderer;Menu menu;World world;GameInterfaces interfaces;GameLog log;bool running=false,game=false;float time=0;std::filesystem::path root;};
 
 Engine::Engine(EngineConfig c):impl_(std::make_unique<Impl>(c)){}
 Engine::~Engine(){shutdown();}
@@ -271,7 +362,7 @@ bool Engine::initialize(){
     impl_->log.write(std::string("OpenGL vendor: ")+(const char*)glGetString(GL_VENDOR));
     impl_->log.write(std::string("OpenGL renderer: ")+(const char*)glGetString(GL_RENDERER));
     impl_->log.write(std::string("OpenGL version: ")+(const char*)glGetString(GL_VERSION));
-    if(!impl_->menu.init(impl_->root,impl_->config.width,impl_->config.height)||!impl_->world.init(impl_->root)){impl_->log.write("Failed to initialize menu or world");return false;}
+    if(!impl_->menu.init(impl_->root,impl_->config.width,impl_->config.height)||!impl_->world.init(impl_->root)||!impl_->interfaces.init(impl_->root,impl_->config.width,impl_->config.height)){impl_->log.write("Failed to initialize menu or world");return false;}
     impl_->running=true;impl_->log.write("Engine initialized successfully");return true;
 }
 void Engine::run(){
@@ -280,15 +371,26 @@ void Engine::run(){
         SDL_Event e;
         while(SDL_PollEvent(&e)){
             if(e.type==SDL_QUIT){impl_->log.write("Window close event");impl_->running=false;}
-            if(e.type==SDL_WINDOWEVENT&&e.window.event==SDL_WINDOWEVENT_SIZE_CHANGED){impl_->renderer->resize(e.window.data1,e.window.data2);impl_->menu.resize(e.window.data1,e.window.data2);}
+            if(e.type==SDL_WINDOWEVENT&&e.window.event==SDL_WINDOWEVENT_SIZE_CHANGED){impl_->renderer->resize(e.window.data1,e.window.data2);impl_->menu.resize(e.window.data1,e.window.data2);impl_->interfaces.resize(e.window.data1,e.window.data2);}
             if(e.type==SDL_MOUSEMOTION&&!impl_->game)impl_->menu.mouse(e.motion.x,e.motion.y);
-            if(e.type==SDL_KEYDOWN&&e.key.keysym.sym==SDLK_ESCAPE){if(impl_->game){impl_->log.write("Returned to menu");impl_->game=false;}else{impl_->log.write("ESC pressed in menu");impl_->running=false;}}
+            if(e.type==SDL_KEYDOWN&&e.key.keysym.sym==SDLK_ESCAPE){if(impl_->interfaces.open()){impl_->interfaces.close();}else if(impl_->game){impl_->log.write("Returned to menu");impl_->game=false;}else{impl_->log.write("ESC pressed in menu");impl_->running=false;}}
+            if(e.type==SDL_KEYDOWN&&impl_->game){
+                switch(e.key.keysym.sym){
+                    case SDLK_e: impl_->interfaces.open(GameInterfaces::Panel::Inventory); break;
+                    case SDLK_1: impl_->interfaces.open(GameInterfaces::Panel::Anvil); break;
+                    case SDLK_2: impl_->interfaces.open(GameInterfaces::Panel::Beacon); break;
+                    case SDLK_3: impl_->interfaces.open(GameInterfaces::Panel::Horse); break;
+                    case SDLK_4: impl_->interfaces.open(GameInterfaces::Panel::Villager); break;
+                    case SDLK_5: impl_->interfaces.open(GameInterfaces::Panel::Nautilus); break;
+                    default: break;
+                }
+            }
             if(e.type==SDL_KEYDOWN&&!impl_->game&&(e.key.keysym.sym==SDLK_RETURN||e.key.keysym.sym==SDLK_SPACE)){impl_->log.write("Entered game from keyboard");impl_->game=true;}
             if(e.type==SDL_MOUSEBUTTONDOWN&&!impl_->game&&e.button.button==SDL_BUTTON_LEFT){if(impl_->menu.hitPlay(e.button.x,e.button.y)){impl_->log.write("Entered game from PLAY");impl_->game=true;}else if(impl_->menu.hitQuit(e.button.x,e.button.y)){impl_->log.write("QUIT selected");impl_->running=false;}}
         }
         auto now=std::chrono::steady_clock::now();impl_->time+=std::chrono::duration<float>(now-prev).count();prev=now;
         impl_->renderer->beginFrame();auto*r=static_cast<OpenGLRenderer*>(impl_->renderer.get());
-        if(impl_->game)impl_->world.draw(r->w(),r->h(),impl_->time);else impl_->menu.draw(impl_->time);
+        if(impl_->game){impl_->world.draw(r->w(),r->h(),impl_->time);impl_->interfaces.draw();}else impl_->menu.draw(impl_->time);
         impl_->renderer->endFrame();SDL_GL_SwapWindow(impl_->window);
     }
 }
@@ -296,6 +398,7 @@ void Engine::shutdown(){
     if(!impl_)return;
     impl_->menu.quit();
     impl_->world.quit();
+    impl_->interfaces.quit();
     impl_->renderer.reset();
     if(impl_->context){SDL_GL_DeleteContext(impl_->context);impl_->context=nullptr;}if(impl_->window){SDL_DestroyWindow(impl_->window);impl_->window=nullptr;}
     IMG_Quit();SDL_Quit();
