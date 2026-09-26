@@ -18,6 +18,7 @@ jobs:
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-SDL2
             mingw-w64-x86_64-SDL2_image
+            mingw-w64-x86_64-glew
       - name: Configure
         shell: msys2 {0}
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -32,7 +33,7 @@ jobs:
           cp build/ImuxCarft.exe dist/
           cp -r build/assets dist/assets
           cp -r build/background dist/background
-          for dll in SDL2.dll SDL2_image.dll libpng16-16.dll zlib1.dll libjpeg-8.dll libtiff-6.dll libwebp-7.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
+          for dll in SDL2.dll SDL2_image.dll glew32.dll libpng16-16.dll zlib1.dll libjpeg-8.dll libtiff-6.dll libwebp-7.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
             if [ -f "/mingw64/bin/$dll" ]; then cp "/mingw64/bin/$dll" dist/; fi
           done
           7z a ImuxCarft-Windows-x64.zip ./dist/*
