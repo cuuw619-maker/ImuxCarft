@@ -241,6 +241,10 @@ layout(location=0)in vec3 p;layout(location=1)in vec2 uv;out vec2 U;uniform mat4
         const char* f=R"(#version 330 core
 in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
         p_=makeProgram(v,f);
+        if(!p_){
+            std::cerr<<"World shader program creation returned 0\\n";
+            return false;
+        }
         tex_[0]=loadPng(root/"assets/textures/blocks/grass_block_top.png");
         tex_[1]=loadPng(root/"assets/textures/blocks/grass_block_side.png");
         tex_[2]=loadPng(root/"assets/textures/blocks/dirt.png");
@@ -259,8 +263,15 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
                  <<" grass_side="<<(tex_[1]!=0)
                  <<" dirt="<<(tex_[2]!=0)
                  <<" stone="<<(tex_[3]!=0)<<"\\n";
+        if(glGetError()!=GL_NO_ERROR){
+            std::cerr<<"World OpenGL error before buffer creation\\n";
+        }
         glGenVertexArrays(1,&vao_);
         glGenBuffers(4,vbo_.data());
+        if(!vao_ || !vbo_[0] || !vbo_[1] || !vbo_[2] || !vbo_[3]){
+            std::cerr<<"World buffer creation failed\\n";
+            return false;
+        }
         glBindVertexArray(vao_);
         for(int i=0;i<4;i++){
             glBindBuffer(GL_ARRAY_BUFFER,vbo_[i]);glBufferData(GL_ARRAY_BUFFER,(GLsizeiptr)(mesh[i].size()*sizeof(V)),mesh[i].data(),GL_STATIC_DRAW);
@@ -322,6 +333,7 @@ bool Engine::initialize(){
     impl_->log.write(std::string("OpenGL version: ")+(const char*)glGetString(GL_VERSION));
     const bool menuOk=impl_->menu.init(impl_->root,impl_->config.width,impl_->config.height);
     impl_->log.write(std::string("Menu initialization: ")+(menuOk?"OK":"FAILED"));
+    impl_->log.write("Initializing world");
     const bool worldOk=impl_->world.init(impl_->root);
     impl_->log.write(std::string("World initialization: ")+(worldOk?"OK":"FAILED"));
     if(!menuOk || !worldOk){
