@@ -169,7 +169,7 @@ out vec4 c;uniform vec4 color;void main(){c=color;})";
         rect(0,0,1,1,.0f,.0f,.0f,.20f);
         text("IMUXCRAFT",w_*.5f/1.f,h_*.18f,8,.95f,.95f,.95f,1);
         rect(.33f,.57f,.34f,.09f,hoverPlay_?.30f:.08f,hoverPlay_?.70f:.08f,hoverPlay_?.30f:.08f,.88f);
-        rect(.33f,.68f,.34f,.09f,hoverQuit_?.70f:.08f,hoverQuit_?.18f:.08f,hoverQuit_?.18f,.88f);
+        rect(.33f,.68f,.34f,.09f,hoverQuit_?.70f:.08f,hoverQuit_?.18f:.08f,hoverQuit_?.18f:.08f,.88f);
         text("PLAY",w_*.5f,h_*.595f,5,1,1,1,1);
         text("QUIT",w_*.5f,h_*.705f,5,1,1,1,1);
         glDisable(GL_BLEND);glUseProgram(0);
@@ -258,7 +258,9 @@ bool Engine::initialize(){
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);
     impl_->window=SDL_CreateWindow(impl_->config.title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,impl_->config.width,impl_->config.height,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
-    if(!impl_->window)return false;impl_->context=SDL_GL_CreateContext(impl_->window);if(!impl_->context)return false;
+    if(!impl_->window)return false;
+    impl_->context=SDL_GL_CreateContext(impl_->window);
+    if(!impl_->context)return false;
     glewExperimental=GL_TRUE;if(glewInit()!=GLEW_OK)return false;SDL_GL_SetSwapInterval(impl_->config.vsync?1:0);
     impl_->renderer=std::make_unique<OpenGLRenderer>();impl_->renderer->initialize(impl_->config.width,impl_->config.height);
     impl_->root=std::filesystem::current_path();
@@ -284,7 +286,10 @@ void Engine::run(){
     }
 }
 void Engine::shutdown(){
-    if(!impl_)return;impl_->menu.quit();impl_->world.quit();impl_->renderer.reset();
+    if(!impl_)return;
+    impl_->menu.quit();
+    impl_->world.quit();
+    impl_->renderer.reset();
     if(impl_->context){SDL_GL_DeleteContext(impl_->context);impl_->context=nullptr;}if(impl_->window){SDL_DestroyWindow(impl_->window);impl_->window=nullptr;}
     IMG_Quit();SDL_Quit();
 }
