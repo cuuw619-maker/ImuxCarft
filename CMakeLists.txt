@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(ImuxCarft VERSION 0.4.0 LANGUAGES CXX)
+project(ImuxCarft VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -31,6 +31,11 @@ endif()
 add_custom_command(TARGET ImuxCarft POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ImuxCarft>/assets"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:ImuxCarft>/assets"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ImuxCarft>/assets/blocks"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/grass_block_top.png" "$<TARGET_FILE_DIR:ImuxCarft>/assets/blocks/grass_block_top.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/grass_block_side.png" "$<TARGET_FILE_DIR:ImuxCarft>/assets/blocks/grass_block_side.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/dirt.png" "$<TARGET_FILE_DIR:ImuxCarft>/assets/blocks/dirt.png"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/stone.png" "$<TARGET_FILE_DIR:ImuxCarft>/assets/blocks/stone.png"
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:ImuxCarft>/background"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/background" "$<TARGET_FILE_DIR:ImuxCarft>/background"
 )
