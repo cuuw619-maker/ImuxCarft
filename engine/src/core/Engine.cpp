@@ -106,8 +106,19 @@ class Menu {
     }
     void text(const std::string&s,float cx,float y,float scale,float r,float g,float b,float a){
         std::vector<float> v;float cw=6*scale,total=(float)s.size()*cw;float x=cx-total*.5f;
-        for(char ch:s){const char*p=glyph(ch);if(p)for(int py=0;py<7;py++)for(int px=0;px<5;px++)if(p[py*5+px]=='1')
-            addQuad(v,(x+px*scale)/float(w_), (y+py*scale)/float(h_),0,scale/float(w_),scale/float(h_));x+=cw;}
+        for(char ch:s){
+            const char* p=glyph(ch);
+            if(p){
+                for(int py=0;py<7;py++){
+                    for(int px=0;px<5;px++){
+                        if(p[py*5+px]=='1'){
+                            addQuad(v,(x+px*scale)/float(w_), (y+py*scale)/float(h_),0,scale/float(w_),scale/float(h_));
+                        }
+                    }
+                }
+            }
+            x+=cw;
+        }
         glUseProgram(uiP_);glBindVertexArray(uiVao_);glBindBuffer(GL_ARRAY_BUFFER,uiVbo_);
         glBufferData(GL_ARRAY_BUFFER,(GLsizeiptr)(v.size()*sizeof(float)),v.data(),GL_STREAM_DRAW);
         glUniform4f(glGetUniformLocation(uiP_,"color"),r,g,b,a);glDrawArrays(GL_TRIANGLES,0,(GLsizei)(v.size()/3));
@@ -158,7 +169,7 @@ out vec4 c;uniform vec4 color;void main(){c=color;})";
         rect(0,0,1,1,.0f,.0f,.0f,.20f);
         text("IMUXCRAFT",w_*.5f/1.f,h_*.18f,8,.95f,.95f,.95f,1);
         rect(.33f,.57f,.34f,.09f,hoverPlay_?.30f:.08f,hoverPlay_?.70f:.08f,hoverPlay_?.30f:.08f,.88f);
-        rect(.33f,.68f,.34f,.09f,hoverQuit_?.70f:.08f,hoverQuit_?.18f:.08f,hoverQuit_?.18f:.88f);
+        rect(.33f,.68f,.34f,.09f,hoverQuit_?.70f:.08f,hoverQuit_?.18f:.08f,hoverQuit_?.18f,.88f);
         text("PLAY",w_*.5f,h_*.595f,5,1,1,1,1);
         text("QUIT",w_*.5f,h_*.705f,5,1,1,1,1);
         glDisable(GL_BLEND);glUseProgram(0);
@@ -209,7 +220,7 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
                 for(int s=0;s<6;s++){int nx=x+dx[s],ny=y+dy[s],nz=z+dz[s];bool solid=nx>=0&&nx<16&&ny>=0&&ny<h&&nz>=0&&nz<16;if(!solid)mesh[mat(type,s)].reserve(mesh[mat(type,s)].size()+6),face(mesh[mat(type,s)],s,x,y,z);}
             }
         }
-        for(int i=0;i<4;i++){count_[i]=(GLsizei)mesh[i].size();glGenVertexArrays(1,&vao_);break;}
+        for(int i=0;i<4;i++) count_[i]=(GLsizei)mesh[i].size();
         glGenVertexArrays(1,&vao_);
         glGenBuffers(4,vbo_.data());
         glBindVertexArray(vao_);
