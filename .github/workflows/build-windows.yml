@@ -33,12 +33,26 @@ jobs:
         shell: msys2 {0}
         run: |
           set -euxo pipefail
-          echo "=== Git revision ==="
-          /usr/bin/git rev-parse HEAD
+          echo "=== Repository ==="
+          pwd
+          echo "=== Texture/resource directories ==="
+          for dir in assets background; do
+            if [ -d "$dir" ]; then
+              echo "--- $dir ---"
+              find "$dir" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | sort || true
+            else
+              echo "--- $dir: directory not present ---"
+            fi
+          done
           echo "=== Texture count ==="
-          find assets background -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | wc -l
-          echo "=== Texture paths ==="
-          find assets background -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | sort || true
+          count=0
+          for dir in assets background; do
+            if [ -d "$dir" ]; then
+              n=$(find "$dir" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | wc -l)
+              count=$((count + n))
+            fi
+          done
+          echo "Total textures: $count"
 
       - name: Configure
         shell: msys2 {0}
@@ -105,7 +119,6 @@ jobs:
 
           copy_deps build/ImuxCarft.exe
 
-          # Ensure the common runtime DLLs are present when supplied by MSYS2.
           for dll in \
             SDL2.dll SDL2_image.dll glew32.dll \
             libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll \
