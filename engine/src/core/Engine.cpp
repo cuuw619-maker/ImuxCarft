@@ -12,6 +12,7 @@
 #include <cmath>
 #include <filesystem>
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -247,14 +248,17 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
 
 }
 class OpenGLRenderer final:public Renderer{int w_=1,h_=1;public:bool initialize(int w,int h)override{resize(w,h);return true;}void resize(int w,int h)override{w_=std::max(w,1);h_=std::max(h,1);glViewport(0,0,w_,h_);}void beginFrame()override{glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);}void endFrame()override{}int w()const{return w_;}int h()const{return h_;}};
-struct Engine::Impl{explicit Impl(EngineConfig c):config(c){}EngineConfig config;SDL_Window*window=nullptr;SDL_GLContext context=nullptr;std::unique_ptr<Renderer>renderer;Menu menu;World world;bool running=false,game=false;float time=0;std::filesystem::path root;};
+struct Engine::Impl{explicit Impl(EngineConfig c):config(c){}EngineConfig config;SDL_Window*window=nullptr;SDL_GLContext context=nullptr;std::unique_ptr<Renderer>renderer;Menu menu;World world;GameLog log;bool running=false,game=false;float time=0;std::filesystem::path root;};
 
 Engine::Engine(EngineConfig c):impl_(std::make_unique<Impl>(c)){}
 Engine::~Engine(){shutdown();}
 
 bool Engine::initialize(){
-    if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER)!=0)return false;
-    if(!(IMG_Init(IMG_INIT_PNG)&IMG_INIT_PNG)){SDL_Quit();return false;}
+    impl_->root=std::filesystem::current_path();
+    impl_->log.open(impl_->root);
+    impl_->log.write("Starting engine");
+    if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER)!=0){impl_->log.write(std::string("SDL_Init failed: ")+SDL_GetError());return false;}
+    if(!(IMG_Init(IMG_INIT_PNG)&IMG_INIT_PNG)){impl_->log.write(std::string("IMG_Init failed: ")+IMG_GetError());SDL_Quit();return false;}
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);
     impl_->window=SDL_CreateWindow(impl_->config.title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,impl_->config.width,impl_->config.height,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
@@ -263,21 +267,24 @@ bool Engine::initialize(){
     if(!impl_->context)return false;
     glewExperimental=GL_TRUE;if(glewInit()!=GLEW_OK)return false;SDL_GL_SetSwapInterval(impl_->config.vsync?1:0);
     impl_->renderer=std::make_unique<OpenGLRenderer>();impl_->renderer->initialize(impl_->config.width,impl_->config.height);
-    impl_->root=std::filesystem::current_path();
-    if(!impl_->menu.init(impl_->root,impl_->config.width,impl_->config.height)||!impl_->world.init(impl_->root))return false;
-    impl_->running=true;return true;
+    impl_->log.write("OpenGL context created");
+    impl_->log.write(std::string("OpenGL vendor: ")+(const char*)glGetString(GL_VENDOR));
+    impl_->log.write(std::string("OpenGL renderer: ")+(const char*)glGetString(GL_RENDERER));
+    impl_->log.write(std::string("OpenGL version: ")+(const char*)glGetString(GL_VERSION));
+    if(!impl_->menu.init(impl_->root,impl_->config.width,impl_->config.height)||!impl_->world.init(impl_->root)){impl_->log.write("Failed to initialize menu or world");return false;}
+    impl_->running=true;impl_->log.write("Engine initialized successfully");return true;
 }
 void Engine::run(){
     auto prev=std::chrono::steady_clock::now();
     while(impl_->running){
         SDL_Event e;
         while(SDL_PollEvent(&e)){
-            if(e.type==SDL_QUIT)impl_->running=false;
+            if(e.type==SDL_QUIT){impl_->log.write("Window close event");impl_->running=false;}
             if(e.type==SDL_WINDOWEVENT&&e.window.event==SDL_WINDOWEVENT_SIZE_CHANGED){impl_->renderer->resize(e.window.data1,e.window.data2);impl_->menu.resize(e.window.data1,e.window.data2);}
             if(e.type==SDL_MOUSEMOTION&&!impl_->game)impl_->menu.mouse(e.motion.x,e.motion.y);
-            if(e.type==SDL_KEYDOWN&&e.key.keysym.sym==SDLK_ESCAPE){if(impl_->game)impl_->game=false;else impl_->running=false;}
-            if(e.type==SDL_KEYDOWN&&!impl_->game&&(e.key.keysym.sym==SDLK_RETURN||e.key.keysym.sym==SDLK_SPACE))impl_->game=true;
-            if(e.type==SDL_MOUSEBUTTONDOWN&&!impl_->game&&e.button.button==SDL_BUTTON_LEFT){if(impl_->menu.hitPlay(e.button.x,e.button.y))impl_->game=true;else if(impl_->menu.hitQuit(e.button.x,e.button.y))impl_->running=false;}
+            if(e.type==SDL_KEYDOWN&&e.key.keysym.sym==SDLK_ESCAPE){if(impl_->game){impl_->log.write("Returned to menu");impl_->game=false;}else{impl_->log.write("ESC pressed in menu");impl_->running=false;}}
+            if(e.type==SDL_KEYDOWN&&!impl_->game&&(e.key.keysym.sym==SDLK_RETURN||e.key.keysym.sym==SDLK_SPACE)){impl_->log.write("Entered game from keyboard");impl_->game=true;}
+            if(e.type==SDL_MOUSEBUTTONDOWN&&!impl_->game&&e.button.button==SDL_BUTTON_LEFT){if(impl_->menu.hitPlay(e.button.x,e.button.y)){impl_->log.write("Entered game from PLAY");impl_->game=true;}else if(impl_->menu.hitQuit(e.button.x,e.button.y)){impl_->log.write("QUIT selected");impl_->running=false;}}
         }
         auto now=std::chrono::steady_clock::now();impl_->time+=std::chrono::duration<float>(now-prev).count();prev=now;
         impl_->renderer->beginFrame();auto*r=static_cast<OpenGLRenderer*>(impl_->renderer.get());
