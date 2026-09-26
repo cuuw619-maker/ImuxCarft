@@ -45,33 +45,6 @@ static std::array<float,16> mul(const std::array<float,16>&a,const std::array<fl
     return r;
 }
 
-static GLuint makeProgram(const char* vs,const char* fs){
-    auto compile=[](GLenum type,const char* src){
-        GLuint s=glCreateShader(type);glShaderSource(s,1,&src,nullptr);glCompileShader(s);
-        GLint ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
-        if(!ok){char log[2048]{};glGetShaderInfoLog(s,sizeof(log),nullptr,log);std::cerr<<log<<"\n";}
-        return s;
-    };
-    GLuint a=compile(GL_VERTEX_SHADER,vs),b=compile(GL_FRAGMENT_SHADER,fs),p=glCreateProgram();
-    glAttachShader(p,a);glAttachShader(p,b);glLinkProgram(p);
-    GLint ok=0;glGetProgramiv(p,GL_LINK_STATUS,&ok);
-    if(!ok){char log[2048]{};glGetProgramInfoLog(p,sizeof(log),nullptr,log);std::cerr<<log<<"\n";}
-    glDeleteShader(a);glDeleteShader(b);return p;
-}
-
-static GLuint loadPng(const std::filesystem::path& path){
-    SDL_Surface* s=IMG_Load(path.string().c_str());
-    if(!s){std::cerr<<"Texture "<<path<<" : "<<IMG_GetError()<<"\n";return 0;}
-    SDL_Surface* r=SDL_ConvertSurfaceFormat(s,SDL_PIXELFORMAT_RGBA32,0);SDL_FreeSurface(s);
-    if(!r)return 0;
-    GLuint t=0;glGenTextures(1,&t);glBindTexture(GL_TEXTURE_2D,t);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,r->w,r->h,0,GL_RGBA,GL_UNSIGNED_BYTE,r->pixels);
-    glBindTexture(GL_TEXTURE_2D,0);SDL_FreeSurface(r);return t;
-}
 
 class GameLog {
     std::ofstream file_;
@@ -91,6 +64,47 @@ public:
     }
     ~GameLog(){write("=== ImuxCarft shutdown ===");}
 };
+
+
+static GameLog* g_runtimeLog=nullptr;
+
+static GLuint makeProgram(const char* vs,const char* fs){
+    auto compile=[](GLenum type,const char* src){
+
+        GLuint s=glCreateShader(type);glShaderSource(s,1,&src,nullptr);glCompileShader(s);
+        GLint ok=0;glGetShaderiv(s,GL_COMPILE_STATUS,&ok);
+        if(!ok){char log[2048]{};glGetShaderInfoLog(s,sizeof(log),nullptr,log);std::cerr<<log<<"\n";}
+        return s;
+    };
+    GLuint a=compile(GL_VERTEX_SHADER,vs),b=compile(GL_FRAGMENT_SHADER,fs);
+    if(!a || !b) return 0;
+    GLuint p=glCreateProgram();
+    if(!p) return 0;
+    glAttachShader(p,a);glAttachShader(p,b);glLinkProgram(p);
+    GLint ok=0;glGetProgramiv(p,GL_LINK_STATUS,&ok);
+    if(!ok){char log[2048]{};glGetProgramInfoLog(p,sizeof(log),nullptr,log);std::cerr<<log<<"\n";}
+    glDeleteShader(a);glDeleteShader(b);return p;
+}
+
+static GLuint loadPng(const std::filesystem::path& path){
+    SDL_Surface* s=IMG_Load(path.string().c_str());
+    if(!s){std::cerr<<"Texture "<<path<<" : "<<IMG_GetError()<<"\n";return 0;}
+    SDL_Surface* r=SDL_ConvertSurfaceFormat(s,SDL_PIXELFORMAT_RGBA32,0);SDL_FreeSurface(s);
+    if(!r)return 0;
+    GLuint t=0;glGenTextures(1,&t);glBindTexture(GL_TEXTURE_2D,t);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
+    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,r->w,r->h,0,GL_RGBA,GL_UNSIGNED_BYTE,r->pixels);
+    glBindTexture(GL_TEXTURE_2D,0);SDL_FreeSurface(r);
+    if(!t){
+        if(g_runtimeLog) g_runtimeLog->write(std::string("OpenGL texture allocation failed: ")+path.string());
+        return 0;
+    }
+    return t;
+}
+
 
 class Menu {
     GLuint skyP_=0,skyVao_=0,skyVbo_=0,uiP_=0,uiVao_=0,uiVbo_=0;
@@ -150,6 +164,7 @@ class Menu {
 public:
     bool init(const std::filesystem::path&root,int w,int h){
         w_=w;h_=h;
+        if(g_runtimeLog) g_runtimeLog->write("Menu GPU initialization started");
         const char* sv=R"(#version 330 core
 layout(location=0)in vec3 p;layout(location=1)in vec2 uv;out vec2 U;uniform mat4 vp;void main(){U=uv;gl_Position=vp*vec4(p,1);})";
         const char* sf=R"(#version 330 core
@@ -236,42 +251,54 @@ class World {
     static int mat(int type,int side){if(type==1)return side==4?0:(side==5?1:1);if(type==2)return 2;return 3;}
 public:
     bool init(const std::filesystem::path&root){
+        try {
+        if(g_runtimeLog) g_runtimeLog->write("World GPU initialization started");
         const char* v=R"(#version 330 core
 layout(location=0)in vec3 p;layout(location=1)in vec2 uv;out vec2 U;uniform mat4 vp;void main(){U=uv;gl_Position=vp*vec4(p,1);})";
         const char* f=R"(#version 330 core
 in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
         p_=makeProgram(v,f);
         if(!p_){
-            std::cerr<<"World shader program creation returned 0\\n";
+            if(g_runtimeLog) g_runtimeLog->write("World shader program creation failed");
             return false;
         }
+        if(g_runtimeLog) g_runtimeLog->write("World shader ready");
         tex_[0]=loadPng(root/"assets/textures/blocks/grass_block_top.png");
         tex_[1]=loadPng(root/"assets/textures/blocks/grass_block_side.png");
         tex_[2]=loadPng(root/"assets/textures/blocks/dirt.png");
         tex_[3]=loadPng(root/"assets/textures/blocks/stone.png");
+        if(g_runtimeLog) g_runtimeLog->write(
+            std::string("World textures loaded: grass_top=")+std::to_string(tex_[0]!=0)+
+            " grass_side="+std::to_string(tex_[1]!=0)+
+            " dirt="+std::to_string(tex_[2]!=0)+
+            " stone="+std::to_string(tex_[3]!=0));
+        if(!tex_[0] || !tex_[1] || !tex_[2] || !tex_[3]){
+            if(g_runtimeLog) g_runtimeLog->write("World texture initialization failed");
+            return false;
+        }
         std::array<std::vector<V>,4> mesh;
         for(int z=0;z<16;z++)for(int x=0;x<16;x++){
             int h=5+(int)(3*std::sin(x*.45f)+2*std::cos(z*.38f));h=std::clamp(h,2,9);
             for(int y=0;y<h;y++){
                 int type=(y==h-1)?1:(y>=h-3?2:3);
                 static const int dx[6]={0,0,-1,1,0,0},dy[6]={0,0,0,0,1,-1},dz[6]={1,-1,0,0,0,0};
-                for(int s=0;s<6;s++){int nx=x+dx[s],ny=y+dy[s],nz=z+dz[s];bool solid=nx>=0&&nx<16&&ny>=0&&ny<h&&nz>=0&&nz<16;if(!solid)mesh[mat(type,s)].reserve(mesh[mat(type,s)].size()+6),face(mesh[mat(type,s)],s,x,y,z);}
+                for(int s=0;s<6;s++){int nx=x+dx[s],ny=y+dy[s],nz=z+dz[s];bool solid=nx>=0&&nx<16&&ny>=0&&ny<h&&nz>=0&&nz<16;if(!solid)face(mesh[mat(type,s)],s,x,y,z);}
             }
         }
         for(int i=0;i<4;i++) count_[i]=(GLsizei)mesh[i].size();
-        std::cerr<<"World textures: grass_top="<<(tex_[0]!=0)
-                 <<" grass_side="<<(tex_[1]!=0)
-                 <<" dirt="<<(tex_[2]!=0)
-                 <<" stone="<<(tex_[3]!=0)<<"\\n";
+        if(g_runtimeLog) g_runtimeLog->write(
+            "World mesh built: vertices=["+std::to_string(count_[0])+","+std::to_string(count_[1])+","+std::to_string(count_[2])+","+std::to_string(count_[3])+"]");
+        if(g_runtimeLog) g_runtimeLog->write("Creating world VAO/VBO buffers");
         if(glGetError()!=GL_NO_ERROR){
             std::cerr<<"World OpenGL error before buffer creation\\n";
         }
         glGenVertexArrays(1,&vao_);
         glGenBuffers(4,vbo_.data());
         if(!vao_ || !vbo_[0] || !vbo_[1] || !vbo_[2] || !vbo_[3]){
-            std::cerr<<"World buffer creation failed\\n";
+            if(g_runtimeLog) g_runtimeLog->write("World buffer creation failed");
             return false;
         }
+        if(g_runtimeLog) g_runtimeLog->write("World VAO/VBO buffers created");
         glBindVertexArray(vao_);
         for(int i=0;i<4;i++){
             glBindBuffer(GL_ARRAY_BUFFER,vbo_[i]);glBufferData(GL_ARRAY_BUFFER,(GLsizeiptr)(mesh[i].size()*sizeof(V)),mesh[i].data(),GL_STATIC_DRAW);
@@ -279,15 +306,20 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
         glBindBuffer(GL_ARRAY_BUFFER,vbo_[0]);glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)0);glEnableVertexAttribArray(0);
         glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(V),(void*)(3*sizeof(float)));glEnableVertexAttribArray(1);
         glBindVertexArray(0);
+        if(g_runtimeLog) g_runtimeLog->write("World vertex buffers uploaded");
         if(!p_){
             std::cerr<<"World shader program creation failed\\n";
             return false;
         }
-        if(!tex_[0] || !tex_[1] || !tex_[2] || !tex_[3]){
-            std::cerr<<"World texture initialization failed\\n";
+        if(g_runtimeLog) g_runtimeLog->write("World initialization completed");
+        return true;
+        } catch(const std::exception& e) {
+            if(g_runtimeLog) g_runtimeLog->write(std::string("World initialization exception: ")+e.what());
+            return false;
+        } catch(...) {
+            if(g_runtimeLog) g_runtimeLog->write("World initialization unknown exception");
             return false;
         }
-        return true;
     }
     void draw(int w,int h,float time){
         glEnable(GL_DEPTH_TEST);glEnable(GL_CULL_FACE);glCullFace(GL_BACK);
@@ -316,6 +348,7 @@ bool Engine::initialize(){
     std::error_code rootEc;
     impl_->root=std::filesystem::weakly_canonical(impl_->root,rootEc);
     impl_->log.open(impl_->root);
+    g_runtimeLog=&impl_->log;
     impl_->log.write("Starting engine");
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER)!=0){impl_->log.write(std::string("SDL_Init failed: ")+SDL_GetError());return false;}
     if(!(IMG_Init(IMG_INIT_PNG)&IMG_INIT_PNG)){impl_->log.write(std::string("IMG_Init failed: ")+IMG_GetError());SDL_Quit();return false;}
@@ -337,7 +370,7 @@ bool Engine::initialize(){
     const bool worldOk=impl_->world.init(impl_->root);
     impl_->log.write(std::string("World initialization: ")+(worldOk?"OK":"FAILED"));
     if(!menuOk || !worldOk){
-        impl_->log.write("Initialization failure details were printed above");
+        impl_->log.write("Initialization failure details were recorded above");
         return false;
     }
     impl_->running=true;impl_->log.write("Engine initialized successfully");return true;
@@ -362,6 +395,7 @@ void Engine::run(){
 }
 void Engine::shutdown(){
     if(!impl_)return;
+    g_runtimeLog=nullptr;
     impl_->menu.quit();
     impl_->world.quit();
     impl_->renderer.reset();
