@@ -1,14 +1,23 @@
 name: Build ImuxCarft Windows
+
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: msys2/setup-msys2@v2
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install MinGW dependencies
+        uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
@@ -19,25 +28,98 @@ jobs:
             mingw-w64-x86_64-SDL2
             mingw-w64-x86_64-SDL2_image
             mingw-w64-x86_64-glew
-      - name: Configure
-        shell: msys2 {0}
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-      - name: Build
-        shell: msys2 {0}
-        run: cmake --build build
-      - name: Package
+
+      - name: Show repository and texture layout
         shell: msys2 {0}
         run: |
+          set -euxo pipefail
+          echo "=== Git revision ==="
+          git rev-parse HEAD
+          echo "=== Texture count ==="
+          find . -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | wc -l
+          echo "=== Texture paths ==="
+          find . -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.bmp' -o -iname '*.tga' \) | sort || true
+
+      - name: Configure
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release --log-level=VERBOSE 2>&1 | tee configure.log
+          grep -E 'SDL2|SDL2_image|GLEW|OPENGL' build/CMakeCache.txt || true
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          cmake --build build --config Release --verbose 2>&1 | tee build.log
+          test -f build/ImuxCarft.exe
+
+      - name: Diagnose executable dependencies
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
+          echo "=== ldd ImuxCarft.exe ==="
+          ldd build/ImuxCarft.exe 2>&1 | tee dependencies.log
+          if grep -Ei 'not found|cannot find' dependencies.log; then
+            echo "::error::Unresolved DLL dependency."
+            exit 1
+          fi
+
+      - name: Package and collect all required DLLs
+        shell: msys2 {0}
+        run: |
+          set -euxo pipefail
           rm -rf dist
           mkdir -p dist
           cp build/ImuxCarft.exe dist/
           cp -r build/assets dist/assets
           cp -r build/background dist/background
-          for dll in SDL2.dll SDL2_image.dll glew32.dll libpng16-16.dll zlib1.dll libjpeg-8.dll libtiff-6.dll libwebp-7.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
-            if [ -f "/mingw64/bin/$dll" ]; then cp "/mingw64/bin/$dll" dist/; fi
-          done
+
+          copy_deps() {
+            local target="$1"
+            while IFS= read -r dep; do
+              [ -f "$dep" ] || continue
+              case "$dep" in
+                /mingw64/bin/*.dll)
+                  local name="$(basename "$dep")"
+                  if [ ! -f "dist/$name" ]; then
+                    echo "COPY DLL: $dep"
+                    cp "$dep" "dist/$name"
+                    copy_deps "$dep"
+                  fi
+                  ;;
+              esac
+            done < <(ldd "$target" 2>/dev/null | awk '/=>/ && $3 ~ /^\/mingw64\/bin\// {print $3}')
+          }
+
+          copy_deps build/ImuxCarft.exe
+
+          echo "=== Packaged files ==="
+          find dist -type f -printf '%p %s bytes\n' | sort
+
+          (
+            cd dist
+            ldd ./ImuxCarft.exe 2>&1 | tee ../packaged-dependencies.log
+          )
+          if grep -Ei 'not found|cannot find' packaged-dependencies.log; then
+            echo "::error::Packaged executable still has unresolved DLL dependencies."
+            exit 1
+          fi
+
           tar -a -c -f ImuxCarft-Windows-x64.zip -C dist .
-      - name: Upload EXE artifact
+
+      - name: Upload build logs and diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: ImuxCarft-build-logs
+          path: |
+            configure.log
+            build.log
+            dependencies.log
+            packaged-dependencies.log
+          if-no-files-found: error
+
+      - name: Upload Windows build
         uses: actions/upload-artifact@v4
         with:
           name: ImuxCarft-Windows-x64
