@@ -196,10 +196,10 @@ layout(location=0)in vec3 p;layout(location=1)in vec2 uv;out vec2 U;uniform mat4
         const char* f=R"(#version 330 core
 in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
         p_=makeProgram(v,f);
-        tex_[0]=loadPng(root/"assets/blocks/grass_block_top.png");
-        tex_[1]=loadPng(root/"assets/blocks/grass_block_side.png");
-        tex_[2]=loadPng(root/"assets/blocks/dirt.png");
-        tex_[3]=loadPng(root/"assets/blocks/stone.png");
+        tex_[0]=loadPng(root/"assets/textures/blocks/grass_block_top.png");
+        tex_[1]=loadPng(root/"assets/textures/blocks/grass_block_side.png");
+        tex_[2]=loadPng(root/"assets/textures/blocks/dirt.png");
+        tex_[3]=loadPng(root/"assets/textures/blocks/stone.png");
         std::array<std::vector<V>,4> mesh;
         for(int z=0;z<16;z++)for(int x=0;x<16;x++){
             int h=5+(int)(3*std::sin(x*.45f)+2*std::cos(z*.38f));h=std::clamp(h,2,9);
