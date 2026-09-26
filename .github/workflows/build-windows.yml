@@ -6,9 +6,6 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    defaults:
-      run:
-        shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
       - uses: msys2/setup-msys2@v2
@@ -22,18 +19,21 @@ jobs:
             mingw-w64-x86_64-SDL2
             mingw-w64-x86_64-SDL2_image
       - name: Configure
+        shell: msys2 {0}
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
       - name: Build
+        shell: msys2 {0}
         run: cmake --build build
       - name: Package
+        shell: msys2 {0}
         run: |
           rm -rf dist
           mkdir -p dist
           cp build/ImuxCarft.exe dist/
-          cp -r build/assets dist/
-          cp -r build/background dist/
+          cp -r build/assets dist/assets
+          cp -r build/background dist/background
           for dll in SDL2.dll SDL2_image.dll libpng16-16.dll zlib1.dll libjpeg-8.dll libtiff-6.dll libwebp-7.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
-            [ -f "/mingw64/bin/$dll" ] && cp "/mingw64/bin/$dll" dist/
+            if [ -f "/mingw64/bin/$dll" ]; then cp "/mingw64/bin/$dll" dist/; fi
           done
           7z a ImuxCarft-Windows-x64.zip ./dist/*
       - uses: actions/upload-artifact@v4
