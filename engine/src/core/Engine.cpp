@@ -107,7 +107,7 @@ class Menu {
     void text(const std::string&s,float cx,float y,float scale,float r,float g,float b,float a){
         std::vector<float> v;float cw=6*scale,total=(float)s.size()*cw;float x=cx-total*.5f;
         for(char ch:s){const char*p=glyph(ch);if(p)for(int py=0;py<7;py++)for(int px=0;px<5;px++)if(p[py*5+px]=='1')
-            addQuad(v,x+px*scale,y+py*scale,0,scale,scale);x+=cw;}
+            addQuad(v,(x+px*scale)/float(w_), (y+py*scale)/float(h_),0,scale/float(w_),scale/float(h_));x+=cw;}
         glUseProgram(uiP_);glBindVertexArray(uiVao_);glBindBuffer(GL_ARRAY_BUFFER,uiVbo_);
         glBufferData(GL_ARRAY_BUFFER,(GLsizeiptr)(v.size()*sizeof(float)),v.data(),GL_STREAM_DRAW);
         glUniform4f(glGetUniformLocation(uiP_,"color"),r,g,b,a);glDrawArrays(GL_TRIANGLES,0,(GLsizei)(v.size()/3));
@@ -228,7 +228,7 @@ in vec2 U;out vec4 c;uniform sampler2D tex;void main(){c=texture(tex,U);})";
         auto vp=mul(perspective(1.05f,a,.1f,150),lookAt(eye,{8,3,8},{0,1,0}));
         glUseProgram(p_);glUniformMatrix4fv(glGetUniformLocation(p_,"vp"),1,GL_FALSE,vp.data());glUniform1i(glGetUniformLocation(p_,"tex"),0);
         glBindVertexArray(vao_);
-        for(int i=0;i<4;i++){glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,tex_[i]);glBindBuffer(GL_ARRAY_BUFFER,vbo_[i]);glDrawArrays(GL_TRIANGLES,0,count_[i]);}
+        for(int i=0;i<4;i++){if(!count_[i])continue;glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,tex_[i]);glBindBuffer(GL_ARRAY_BUFFER,vbo_[i]);glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(V),(void*)0);glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(V),(void*)(3*sizeof(float)));glDrawArrays(GL_TRIANGLES,0,count_[i]);}
         glBindVertexArray(0);glUseProgram(0);
     }
     void quit(){for(auto&t:tex_)if(t)glDeleteTextures(1,&t);glDeleteBuffers(4,vbo_.data());if(vao_)glDeleteVertexArrays(1,&vao_);if(p_)glDeleteProgram(p_);}
