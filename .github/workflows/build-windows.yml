@@ -37,7 +37,14 @@ jobs:
             if [ -f "/mingw64/bin/$dll" ]; then cp "/mingw64/bin/$dll" dist/; fi
           done
           tar -a -c -f ImuxCarft-Windows-x64.zip -C dist .
-      - uses: actions/upload-artifact@v4
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
         with:
           name: ImuxCarft-Windows-x64
-          path: ImuxCarft-Windows-x64.zip
+          path: |
+            dist/ImuxCarft.exe
+            dist/assets
+            dist/background
+            dist/*.dll
+            ImuxCarft-Windows-x64.zip
+          if-no-files-found: error
