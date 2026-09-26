@@ -16,6 +16,10 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace imux {
 namespace {
 
@@ -68,6 +72,25 @@ static GLuint loadPng(const std::filesystem::path& path){
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,r->w,r->h,0,GL_RGBA,GL_UNSIGNED_BYTE,r->pixels);
     glBindTexture(GL_TEXTURE_2D,0);SDL_FreeSurface(r);return t;
 }
+
+class GameLog {
+    std::ofstream file_;
+    std::chrono::steady_clock::time_point start_{std::chrono::steady_clock::now()};
+public:
+    void open(const std::filesystem::path& root){
+        std::error_code ec;
+        std::filesystem::create_directories(root / "logs", ec);
+        file_.open(root / "logs" / "imuxcarft.log", std::ios::out | std::ios::trunc);
+        write("=== ImuxCarft runtime log ===");
+    }
+    void write(const std::string& message){
+        const auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start_).count();
+        const std::string line="["+std::to_string(ms)+" ms] "+message;
+        if(file_){file_<<line<<'\\n';file_.flush();}
+        std::cerr<<line<<'\\n';
+    }
+    ~GameLog(){write("=== ImuxCarft shutdown ===");}
+};
 
 class Menu {
     GLuint skyP_=0,skyVao_=0,skyVbo_=0,uiP_=0,uiVao_=0,uiVbo_=0;
@@ -254,7 +277,10 @@ Engine::Engine(EngineConfig c):impl_(std::make_unique<Impl>(c)){}
 Engine::~Engine(){shutdown();}
 
 bool Engine::initialize(){
-    impl_->root=std::filesystem::current_path();
+    const char* base=SDL_GetBasePath();
+    if(base){impl_->root=std::filesystem::path(base);SDL_free((void*)base);}else{impl_->root=std::filesystem::current_path();}
+    std::error_code rootEc;
+    impl_->root=std::filesystem::weakly_canonical(impl_->root,rootEc);
     impl_->log.open(impl_->root);
     impl_->log.write("Starting engine");
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER)!=0){impl_->log.write(std::string("SDL_Init failed: ")+SDL_GetError());return false;}
