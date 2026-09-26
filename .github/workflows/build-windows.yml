@@ -36,7 +36,7 @@ jobs:
           for dll in SDL2.dll SDL2_image.dll glew32.dll libpng16-16.dll zlib1.dll libjpeg-8.dll libtiff-6.dll libwebp-7.dll libgcc_s_seh-1.dll libstdc++-6.dll libwinpthread-1.dll; do
             if [ -f "/mingw64/bin/$dll" ]; then cp "/mingw64/bin/$dll" dist/; fi
           done
-          7z a ImuxCarft-Windows-x64.zip ./dist/*
+          tar -a -c -f ImuxCarft-Windows-x64.zip -C dist .
       - uses: actions/upload-artifact@v4
         with:
           name: ImuxCarft-Windows-x64
